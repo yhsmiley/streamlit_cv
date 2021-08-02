@@ -1,9 +1,7 @@
 from pathlib import Path
 
 import cv2
-import numpy as np
 import streamlit as st
-from PIL import Image
 
 from ScaledYOLOv4.scaled_yolov4 import Scaled_YOLOV4
 
@@ -44,27 +42,32 @@ def annotate_image(image, detections):
 
 st.set_page_config(layout="wide")
 st.title("Object detection with ScaledYOLOv4 (Folder of images)")
-images_folder = st.text_input("Folder path containing images", None)
+images_folder = st.text_input("Folder path containing images")
 confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.5, 0.05)
 nms_threshold = st.slider("NMS threshold", 0.0, 1.0, 0.5, 0.05)
 num_cols = st.slider("Number of display columns", 1, 5, 2, 1)
 
 od = initialize_od()
 
+images_folder = str(images_folder) or None
+
 suffixes = [".png", ".jpg", ".jpeg"]
 if images_folder is not None:
-    all_images = []
-    for image_path in Path(images_folder).glob("*"):
-        if image_path.suffix in suffixes:
-            image = cv2.imread(str(image_path))
+    if not Path(images_folder).is_dir():
+        st.error("Folder does not exist!")
+    else:
+        all_images = []
+        for image_path in Path(images_folder).glob("*"):
+            if image_path.suffix in suffixes:
+                image = cv2.imread(str(image_path))
 
-            detections = process_image(od, image, confidence_threshold, nms_threshold)
-            img = annotate_image(image, detections)
+                detections = process_image(od, image, confidence_threshold, nms_threshold)
+                img = annotate_image(image, detections)
 
-            all_images.append(img)
+                all_images.append(img)
 
-    for i in range(0, len(all_images), num_cols):
-        cols = st.beta_columns(num_cols)
-        images = all_images[i:i+num_cols]
-        for j in range(len(images)):
-            cols[j].image(images[j], channels="BGR")
+        for i in range(0, len(all_images), num_cols):
+            cols = st.beta_columns(num_cols)
+            images = all_images[i:i+num_cols]
+            for j in range(len(images)):
+                cols[j].image(images[j], channels="BGR")

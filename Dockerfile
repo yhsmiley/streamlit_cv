@@ -1,4 +1,4 @@
-# docker build -t streamlit --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) .
+# docker build -t streamlit .
 
 FROM nvcr.io/nvidia/cuda:10.0-cudnn7-devel-ubuntu18.04
 
@@ -49,12 +49,35 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 COPY requirements.txt requirements.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# install mish_cuda
+# RUN pip3 install --no-cache-dir \
+#     gdown
+
+# install mish_cuda (for ScaledYOLOv4)
 RUN cd / && git clone https://github.com/JunnYu/mish-cuda && cd mish-cuda && python3 setup.py build install
 
+# install ScaledYOLOv4
+# RUN cd / && \
+#     git clone https://github.com/yhsmiley/ScaledYOLOv4 && \
+#     cd ScaledYOLOv4 && \
+#     git checkout d9420e432a5aaca9ff50a9c5857aa9f251828126 && \
+#     cd scaledyolov4/weights && \
+#     bash get_weights.sh && \
+#     cd ../.. && \
+#     pip3 install --no-cache-dir -e .
+
+# # install DeepSORT
+# RUN cd / && \
+#     git clone https://github.com/levan92/deep_sort_realtime && \
+#     cd deep_sort_realtime && \
+#     git checkout 012ec4951580bbf844b5cd4536fe57128ed89b64 && \
+#     cd deep_sort_realtime/embedder/weights && \
+#     bash download_tf_wts.sh && \
+#     cd ../../.. && \
+#     pip3 install --no-cache-dir -e .
+
 # minimal Dockerfile which expects to receive build-time arguments, and creates a new user called “user” (put at end of Dockerfile)
-ARG USER_ID
-ARG GROUP_ID
-RUN addgroup --gid $GROUP_ID user
-RUN adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID user
-USER user
+# ARG USER_ID
+# ARG GROUP_ID
+# RUN addgroup --gid $GROUP_ID user
+# RUN adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID user
+# USER user

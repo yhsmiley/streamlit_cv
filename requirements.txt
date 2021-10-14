@@ -4,8 +4,8 @@ opencv-python==4.5.3.56
 Pillow==8.0.1
 pyyaml==5.3.1
 scipy==1.5.4
-streamlit==0.86.0
-streamlit-webrtc==0.27.1
+streamlit==1.0.0
+streamlit-webrtc==0.31.0
 torch==1.7.0
 torchvision==0.8.1
 tqdm==4.54.1

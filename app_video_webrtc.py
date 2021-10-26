@@ -1,7 +1,7 @@
+import logging
 from pathlib import Path
 
 import av
-import cv2
 import pkg_resources
 import streamlit as st
 from aiortc.contrib.media import MediaPlayer, MediaRecorder
@@ -15,6 +15,12 @@ from typing import Tuple
 
 from misc.utils import process_image, annotate_image
 from scaledyolov4.scaled_yolov4 import ScaledYOLOV4
+
+
+# set up logging (inherit from streamlit's logger)
+log_level = logging.INFO
+logger = logging.getLogger(__name__)
+logger.setLevel(log_level)
 
 
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
@@ -102,7 +108,7 @@ class ScaledYOLOv4VideoProcessor(VideoProcessorBase):
 
     def change_od(self, model_architecture: str, input_size: int) -> None:
         weights, cfg = self._check_model_architecture(model_architecture)
-        print(f'changing model to {model_architecture}, size {input_size}')
+        logger.info(f'changing model to {model_architecture}, size {input_size}')
 
         del self.od
         self.od = None

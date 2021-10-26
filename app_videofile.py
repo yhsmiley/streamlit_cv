@@ -1,4 +1,5 @@
 import atexit
+import logging
 import tempfile
 import time
 from datetime import datetime, timedelta
@@ -12,6 +13,12 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 from misc.utils import annotate_image, annotate_tracks, process_image, process_tracks, COCO_CLASSES
 from misc.video_getter_cv2 import VideoStream
 from scaledyolov4.scaled_yolov4 import ScaledYOLOV4
+
+
+# set up logging (inherit from streamlit's logger)
+log_level = logging.INFO
+logger = logging.getLogger(__name__)
+logger.setLevel(log_level)
 
 
 @st.cache(allow_output_mutation=True)
@@ -92,7 +99,7 @@ def hex_to_bgr(hex_string):
 
 
 def cleanup(tfile_path):
-    print('Cleaning up...')
+    logger.info('Cleaning up...')
     Path(tfile_path).unlink()
 
 

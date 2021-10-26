@@ -1,2 +1,5 @@
 [server]
 maxUploadSize=1028
+
+[logger]
+messageFormat = "[%(levelname)s] [%(name)s] %(message)s"

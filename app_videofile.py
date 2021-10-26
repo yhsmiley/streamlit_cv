@@ -8,7 +8,8 @@ import cv2
 import pkg_resources
 import streamlit as st
 
-from misc.utils import annotate_image, process_image
+from deep_sort_realtime.deepsort_tracker import DeepSort
+from misc.utils import annotate_image, annotate_tracks, process_image, process_tracks, COCO_CLASSES
 from misc.video_getter_cv2 import VideoStream
 from scaledyolov4.scaled_yolov4 import ScaledYOLOV4
 
@@ -40,19 +41,25 @@ def initialize_od(model_architecture, input_size):
     )
 
 
-def initialize_vid_getter(stream_source, src_recording_dir):
-    video_feed_name = 'video1'
-    manual_video_fps = -1
-    do_reconnect = True
-    reconnect_threshold_sec = 3
-    queue_size = 3
-    return VideoStream(video_feed_name,
-                       stream_source,
-                       manual_video_fps=manual_video_fps,
-                       recording_dir=src_recording_dir,
-                       reconnect_threshold_sec=reconnect_threshold_sec,
-                       do_reconnect=do_reconnect,
-                       queue_size=queue_size)
+@st.cache(allow_output_mutation=True)
+def initialize_deepsort():
+    return DeepSort(
+        max_age=30,
+        nn_budget=10,
+        embedder='clip_ViT-B/32'
+    )
+
+
+def initialize_vid_getter(stream_source, video_feed_name='video1', manual_video_fps=-1,
+                          do_reconnect=False, reconnect_threshold_sec=3, queue_size=3):
+    return VideoStream(
+        video_feed_name,
+        stream_source,
+        manual_video_fps=manual_video_fps,
+        reconnect_threshold_sec=reconnect_threshold_sec,
+        do_reconnect=do_reconnect,
+        queue_size=queue_size
+    )
 
 
 def get_vid_time_from_sec(sec):
@@ -60,8 +67,8 @@ def get_vid_time_from_sec(sec):
     return datetime.strptime(str(vid_duration_sec), "%H:%M:%S")
 
 
-def initialize_video(stream_source, src_recording_dir):
-    st.session_state.vid_getter = initialize_vid_getter(stream_source, src_recording_dir)
+def initialize_video(stream_source):
+    st.session_state.vid_getter = initialize_vid_getter(stream_source)
     vid_frame_count = int(st.session_state.vid_getter.stream.get(cv2.CAP_PROP_FRAME_COUNT))
     vid_fps = int(st.session_state.vid_getter.stream.get(cv2.CAP_PROP_FPS))
     st.session_state.inited = True
@@ -70,10 +77,18 @@ def initialize_video(stream_source, src_recording_dir):
 
 def get_msec_from_vid_start_time():
     # 16hr due to streamlit timezone bug
-    return timedelta(hours=st.session_state.vid_start_time.hour - 16,
-                     minutes=st.session_state.vid_start_time.minute,
-                     seconds=st.session_state.vid_start_time.second
-                     ).total_seconds() * 1000
+    return timedelta(
+        hours=st.session_state.vid_start_time.hour - 16,
+        minutes=st.session_state.vid_start_time.minute,
+        seconds=st.session_state.vid_start_time.second
+    ).total_seconds() * 1000
+
+
+def hex_to_bgr(hex_string):
+    r_hex = hex_string[1:3]
+    g_hex = hex_string[3:5]
+    b_hex = hex_string[5:7]
+    return int(b_hex, 16), int(g_hex, 16), int(r_hex, 16)
 
 
 def cleanup(tfile_path):
@@ -82,14 +97,35 @@ def cleanup(tfile_path):
 
 
 def main():
+    def frame_chooser_on_change():
+        if not st.session_state.stopped:
+            st.session_state.vid_getter.start_from(start_msec=get_msec_from_vid_start_time())
+            tracker.delete_all_tracks()
+            time.sleep(0.5)
+
+    def tracking_on_change():
+        if not st.session_state.stopped:
+            tracker.delete_all_tracks()
+
     st.set_page_config(layout='wide')
     st.title('Object detection with ScaledYOLOv4 (Video File)')
-    confidence_threshold = st.slider('Confidence threshold', 0.0, 1.0, 0.5, 0.05)
-    nms_threshold = st.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
+    confidence_threshold_col, _, nms_threshold_col = st.columns([5, 1, 5])
+    confidence_threshold = confidence_threshold_col.slider('Confidence threshold', 0.0, 1.0, 0.5, 0.05)
+    nms_threshold = nms_threshold_col.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
 
-    model_architecture = st.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1)
-    input_size = st.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2)
+    model_architecture_col, input_size_col, classes_col = st.columns([2, 2, 6])
+    model_architecture = model_architecture_col.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1)
+    input_size = input_size_col.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2)
+    classes = classes_col.multiselect('Classes to display', COCO_CLASSES, ['person'])
+
+    tracking_col, color_hex_col, font_size_col = st.columns([2, 2, 6])
+    tracking = tracking_col.checkbox('Tracking with deepsort', on_change=tracking_on_change)
+    color_hex = color_hex_col.color_picker('Color for bbox', '#0000ff')
+    bbox_color = hex_to_bgr(color_hex)
+    font_size = font_size_col.slider('Font size', 0.5, 1.5, 1.0, 0.1)
+
     od = initialize_od(model_architecture, input_size)
+    tracker = initialize_deepsort()
 
     if 'stream_source' not in st.session_state:
         st.session_state.stream_source = None
@@ -107,9 +143,6 @@ def main():
         st.session_state.stream_source = None
         st.session_state.inited = False
 
-    src_recording_dir = st.text_input('Path to save recorded source video')
-    src_recording_dir = str(src_recording_dir) or None
-
     initialize_vid = st.empty()
     start_stop = st.empty()
     img_placeholder = st.empty()
@@ -120,22 +153,21 @@ def main():
         st.session_state.inited = False
 
     if st.session_state.stream_source is not None and not st.session_state.inited and initialize_vid.button('Initialize Video'):
-        st.session_state.vid_duration = initialize_video(st.session_state.stream_source, src_recording_dir)
+        st.session_state.vid_duration = initialize_video(st.session_state.stream_source)
     if st.session_state.inited:
         tz_offset = timedelta(hours=8)
-        frame_chooser.slider('Starting video time',
-                             min_value=(datetime.strptime("0:0:0", "%H:%M:%S") - tz_offset).time(),
-                             max_value=(st.session_state.vid_duration - tz_offset).time(),
-                             step=timedelta(seconds=1),
-                             format='HH:mm:ss',
-                             key='vid_start_time')
+        frame_chooser.slider(
+            'Starting video time',
+            min_value=(datetime.strptime("0:0:0", "%H:%M:%S") - tz_offset).time(),
+            max_value=(st.session_state.vid_duration - tz_offset).time(),
+            step=timedelta(seconds=1),
+            format='HH:mm:ss',
+            key='vid_start_time',
+            on_change=frame_chooser_on_change
+        )
 
     if 'stopped' not in st.session_state:
         st.session_state.stopped = True
-
-    if frame_chooser and not st.session_state.stopped:
-        st.session_state.vid_getter.start_from(start_msec=get_msec_from_vid_start_time())
-        time.sleep(0.5)
 
     if st.session_state.inited and start_stop.button('Start / Stop'):
         if st.session_state.stopped:
@@ -153,13 +185,17 @@ def main():
 
     while not st.session_state.stopped:
         try:
-            vid_frame, vid_time_msec = st.session_state.vid_getter.read()
+            vid_frame, curr_vid_time_msec = st.session_state.vid_getter.read()
 
             if len(vid_frame):
-                detections = process_image(od, vid_frame, confidence_threshold, nms_threshold)
-                img = annotate_image(vid_frame, detections)
+                if tracking:
+                    tracks = process_tracks(od, tracker, vid_frame, confidence_threshold, nms_threshold, classes=classes)
+                    img = annotate_tracks(vid_frame, tracks, color=bbox_color, font_size=font_size)
+                else:
+                    detections = process_image(od, vid_frame, confidence_threshold, nms_threshold, classes=classes)
+                    img = annotate_image(vid_frame, detections, color=bbox_color, font_size=font_size)
                 img_placeholder.image(img, channels='BGR')
-                frame_time.write(f'Current video time: {get_vid_time_from_sec(int(vid_time_msec/1000)).time()}')
+                frame_time.write(f'Current video time: {get_vid_time_from_sec(int(curr_vid_time_msec/1000)).time()}')
 
             elif st.session_state.vid_getter.stopped:
                 st.error('Video file ended. Stopping...')

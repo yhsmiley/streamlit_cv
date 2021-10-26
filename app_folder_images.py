@@ -4,7 +4,7 @@ import cv2
 import pkg_resources
 import streamlit as st
 
-from misc.utils import process_image_cache, annotate_image_cache
+from misc.utils import process_image_cache, annotate_image_cache, COCO_CLASSES
 from scaledyolov4.scaled_yolov4 import ScaledYOLOV4
 
 
@@ -35,19 +35,36 @@ def initialize_od(model_architecture, input_size):
     )
 
 
+def hex_to_bgr(hex_string):
+    r_hex = hex_string[1:3]
+    g_hex = hex_string[3:5]
+    b_hex = hex_string[5:7]
+    return int(b_hex, 16), int(g_hex, 16), int(r_hex, 16)
+
 
 def main():
     st.set_page_config(layout='wide')
     st.title('Object detection with ScaledYOLOv4 (Folder of images)')
-    images_folder = st.text_input('Folder path containing images')
-    confidence_threshold = st.slider('Confidence threshold', 0.0, 1.0, 0.5, 0.05)
-    nms_threshold = st.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
-    num_cols = st.slider('Number of display columns', 1, 5, 2, 1)
 
-    model_architecture = st.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1)
-    input_size = st.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2)
+    confidence_threshold_col, _, nms_threshold_col = st.columns([5, 1, 5])
+    confidence_threshold = confidence_threshold_col.slider('Confidence threshold', 0.0, 1.0, 0.5, 0.05)
+    nms_threshold = nms_threshold_col.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
+
+    model_architecture_col, input_size_col, classes_col = st.columns([2, 2, 6])
+    model_architecture = model_architecture_col.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1)
+    input_size = input_size_col.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2)
+    classes = classes_col.multiselect('Classes to display', COCO_CLASSES, ['person'])
+
+    color_hex_col, font_size_col, _ = st.columns([2, 6, 2])
+    color_hex = color_hex_col.color_picker('Color for bbox', '#0000ff')
+    bbox_color = hex_to_bgr(color_hex)
+    font_size = font_size_col.slider('Font size', 0.5, 1.5, 1.0, 0.1)
+
     od = initialize_od(model_architecture, input_size)
 
+    num_cols_col, _, images_folder_col, _ = st.columns([3, 1, 12, 4])
+    num_cols = num_cols_col.slider('Num of columns', 1, 5, 2, 1)
+    images_folder = images_folder_col.text_input('Folder path containing images')
     images_folder = str(images_folder) or None
 
     suffixes = ['.png', '.jpg', '.jpeg']
@@ -60,8 +77,8 @@ def main():
                 if image_path.suffix in suffixes:
                     image = cv2.imread(str(image_path))
 
-                    detections = process_image_cache(od, image, confidence_threshold, nms_threshold)
-                    img = annotate_image_cache(image, detections)
+                    detections = process_image_cache(od, image, confidence_threshold, nms_threshold, classes=classes)
+                    img = annotate_image_cache(image, detections, color=bbox_color, font_size=font_size)
 
                     all_images.append(img)
 

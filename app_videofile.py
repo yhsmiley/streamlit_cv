@@ -109,6 +109,7 @@ def main():
 
     st.set_page_config(layout='wide')
     st.title('Object detection with ScaledYOLOv4 (Video File)')
+
     confidence_threshold_col, _, nms_threshold_col = st.columns([5, 1, 5])
     confidence_threshold = confidence_threshold_col.slider('Confidence threshold', 0.0, 1.0, 0.5, 0.05)
     nms_threshold = nms_threshold_col.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)

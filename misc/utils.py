@@ -22,7 +22,8 @@ def process_image_cache(od, image, confidence_threshold, nms_threshold, classes=
 
 
 @st.cache
-def annotate_image_cache(image, detections, font=cv2.FONT_HERSHEY_SIMPLEX, color=(255, 0, 0)):
+def annotate_image_cache(image, detections, font=cv2.FONT_HERSHEY_SIMPLEX, color=(255, 0, 0),
+                         font_size=1):
     draw_frame = image.copy()
     frame_h, frame_w, _ = image.shape
     for det in detections:
@@ -34,7 +35,7 @@ def annotate_image_cache(image, detections, font=cv2.FONT_HERSHEY_SIMPLEX, color
         b = min(b, frame_h)
         cv2.rectangle(draw_frame, (l, t), (r, b), color, 2)
         label = f'{det_class}: {score:.2f}'
-        cv2.putText(draw_frame, label, (l+5, t+30), font, 1, color, 2)
+        cv2.putText(draw_frame, label, (l+5, t+30), font, font_size, color, 2)
 
     return draw_frame
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import cv2
 import pkg_resources
 import streamlit as st
+import torch
 
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from misc.utils import annotate_image, annotate_tracks, process_image, process_tracks, COCO_CLASSES
@@ -19,6 +20,10 @@ from scaledyolov4.scaled_yolov4 import ScaledYOLOV4
 log_level = logging.INFO
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
+
+
+def clear_cuda_cache():
+    torch.cuda.empty_cache()
 
 
 @st.cache(allow_output_mutation=True)
@@ -98,22 +103,25 @@ def hex_to_bgr(hex_string):
     return int(b_hex, 16), int(g_hex, 16), int(r_hex, 16)
 
 
+def frame_chooser_on_change(stopped, vid_getter, tracker):
+    if not stopped:
+        vid_getter.start_from(start_msec=get_msec_from_vid_start_time())
+        tracker.delete_all_tracks()
+        time.sleep(0.5)
+
+
+def tracking_on_change(stopped, tracker):
+    clear_cuda_cache()
+    if not stopped:
+        tracker.delete_all_tracks()
+
+
 def cleanup(tfile_path):
     logger.info('Cleaning up...')
     Path(tfile_path).unlink()
 
 
 def main():
-    def frame_chooser_on_change():
-        if not st.session_state.stopped:
-            st.session_state.vid_getter.start_from(start_msec=get_msec_from_vid_start_time())
-            tracker.delete_all_tracks()
-            time.sleep(0.5)
-
-    def tracking_on_change():
-        if not st.session_state.stopped:
-            tracker.delete_all_tracks()
-
     st.set_page_config(layout='wide')
     st.title('Object detection with ScaledYOLOv4 (Video File)')
 
@@ -122,18 +130,21 @@ def main():
     nms_threshold = nms_threshold_col.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
 
     model_architecture_col, input_size_col, classes_col = st.columns([2, 2, 6])
-    model_architecture = model_architecture_col.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1)
-    input_size = input_size_col.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2)
+    model_architecture = model_architecture_col.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1, on_change=clear_cuda_cache)
+    input_size = input_size_col.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2, on_change=clear_cuda_cache)
     classes = classes_col.multiselect('Classes to display', COCO_CLASSES, ['person'])
-
-    tracking_col, color_hex_col, font_size_col = st.columns([2, 2, 6])
-    tracking = tracking_col.checkbox('Tracking with deepsort', on_change=tracking_on_change)
-    color_hex = color_hex_col.color_picker('Color for bbox', '#0000ff')
-    bbox_color = hex_to_bgr(color_hex)
-    font_size = font_size_col.slider('Font size', 0.5, 1.5, 1.0, 0.1)
 
     od = initialize_od(model_architecture, input_size)
     tracker = initialize_deepsort()
+
+    if 'stopped' not in st.session_state:
+        st.session_state.stopped = True
+
+    tracking_col, color_hex_col, font_size_col = st.columns([2, 2, 6])
+    tracking = tracking_col.checkbox('Tracking with deepsort', on_change=tracking_on_change, args=(st.session_state.stopped, tracker))
+    color_hex = color_hex_col.color_picker('Color for bbox', '#0000ff')
+    bbox_color = hex_to_bgr(color_hex)
+    font_size = font_size_col.slider('Font size', 0.5, 1.5, 1.0, 0.1)
 
     if 'stream_source' not in st.session_state:
         st.session_state.stream_source = None
@@ -173,9 +184,6 @@ def main():
             key='vid_start_time',
             on_change=frame_chooser_on_change
         )
-
-    if 'stopped' not in st.session_state:
-        st.session_state.stopped = True
 
     if st.session_state.inited and start_stop.button('Start / Stop'):
         if st.session_state.stopped:

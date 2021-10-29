@@ -3,9 +3,14 @@ from pathlib import Path
 import cv2
 import pkg_resources
 import streamlit as st
+import torch
 
-from misc.utils import process_image_cache, annotate_image_cache, COCO_CLASSES
+from misc.utils import process_image, annotate_image, COCO_CLASSES
 from scaledyolov4.scaled_yolov4 import ScaledYOLOV4
+
+
+def clear_cuda_cache():
+    torch.cuda.empty_cache()
 
 
 @st.cache(allow_output_mutation=True)
@@ -51,8 +56,8 @@ def main():
     nms_threshold = nms_threshold_col.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
 
     model_architecture_col, input_size_col, classes_col = st.columns([2, 2, 6])
-    model_architecture = model_architecture_col.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1)
-    input_size = input_size_col.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2)
+    model_architecture = model_architecture_col.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1, on_change=clear_cuda_cache)
+    input_size = input_size_col.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2, on_change=clear_cuda_cache)
     classes = classes_col.multiselect('Classes to display', COCO_CLASSES, ['person'])
 
     color_hex_col, font_size_col, _ = st.columns([2, 6, 2])
@@ -77,8 +82,8 @@ def main():
                 if image_path.suffix in suffixes:
                     image = cv2.imread(str(image_path))
 
-                    detections = process_image_cache(od, image, confidence_threshold, nms_threshold, classes=classes)
-                    img = annotate_image_cache(image, detections, color=bbox_color, font_size=font_size)
+                    detections = process_image(od, image, confidence_threshold, nms_threshold, classes=classes)
+                    img = annotate_image(image, detections, color=bbox_color, font_size=font_size)
 
                     all_images.append(img)
 

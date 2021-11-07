@@ -14,32 +14,6 @@ COCO_CLASSES = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'tr
     'teddy bear', 'hair drier', 'toothbrush']
 
 
-@st.cache
-def process_image_cache(od, image, confidence_threshold, nms_threshold, classes=None):
-    od.thresh = confidence_threshold
-    od.nms_thresh = nms_threshold
-    return od.detect_get_box_in([image], box_format='ltrb', classes=classes)[0]
-
-
-@st.cache
-def annotate_image_cache(image, detections, font=cv2.FONT_HERSHEY_SIMPLEX, color=(255, 0, 0),
-                         font_size=1):
-    draw_frame = image.copy()
-    frame_h, frame_w, _ = image.shape
-    for det in detections:
-        bb, score, det_class = det
-        l, t, r, b = bb
-        l = max(l, 0)
-        t = max(t, 0)
-        r = min(r, frame_w)
-        b = min(b, frame_h)
-        cv2.rectangle(draw_frame, (l, t), (r, b), color, 2)
-        label = f'{det_class}: {score:.2f}'
-        cv2.putText(draw_frame, label, (l+5, t+30), font, font_size, color, 2)
-
-    return draw_frame
-
-
 def process_image(od, image, confidence_threshold, nms_threshold, classes=None):
     od.thresh = confidence_threshold
     od.nms_thresh = nms_threshold
@@ -89,5 +63,32 @@ def _draw_track(frame, track, font=cv2.FONT_HERSHEY_SIMPLEX, color=(255, 0, 0), 
     b = min(b, frame_h)
 
     label = f'{track.get_det_class()} {track.track_id}: {track.get_det_conf():.2f}'
+    cv2.rectangle(frame, (l, t), (r, b), color, 2)
+    cv2.putText(frame, label, (l+5, t+30), font, font_size, color, 2)
+
+
+def process_byte_tracks(od, tracker, image, nms_threshold, low_confidence_threshold=0.1, classes=None):
+    od.thresh = low_confidence_threshold
+    od.nms_thresh = nms_threshold
+    detections = od.detect_get_box_in([image], box_format='ltwh', classes=classes)[0]
+    return tracker.update(detections=detections)
+
+
+def annotate_byte_tracks(image, tracks, color=(255, 0, 0), font_size=1):
+    draw_frame = image.copy()
+    for track in tracks:
+        _draw_byte_track(draw_frame, track, color=color, font_size=font_size)
+    return draw_frame
+
+
+def _draw_byte_track(frame, track, font=cv2.FONT_HERSHEY_SIMPLEX, color=(255, 0, 0), font_size=1):
+    frame_h, frame_w, _ = frame.shape
+    l, t, r, b = [int(x) for x in track.ltrb]
+    l = max(l, 0)
+    t = max(t, 0)
+    r = min(r, frame_w)
+    b = min(b, frame_h)
+
+    label = f'{track.det_class} {track.track_id}: {track.score:.2f}'
     cv2.rectangle(frame, (l, t), (r, b), color, 2)
     cv2.putText(frame, label, (l+5, t+30), font, font_size, color, 2)

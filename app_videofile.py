@@ -10,8 +10,9 @@ import pkg_resources
 import streamlit as st
 import torch
 
+from bytetrack_realtime.byte_tracker import ByteTracker
 from deep_sort_realtime.deepsort_tracker import DeepSort
-from misc.utils import annotate_image, annotate_tracks, process_image, process_tracks, COCO_CLASSES
+from misc.utils import annotate_image, annotate_tracks, annotate_byte_tracks, process_image, process_tracks, process_byte_tracks, COCO_CLASSES
 from misc.video_getter_cv2 import VideoStream
 from scaledyolov4.scaled_yolov4 import ScaledYOLOV4
 
@@ -62,6 +63,15 @@ def initialize_deepsort():
     )
 
 
+@st.cache(allow_output_mutation=True)
+def initialize_bytetracker():
+    return ByteTracker(
+        track_thresh=0.6,
+        track_buffer=30,
+        match_thresh=0.9
+    )
+
+
 def initialize_vid_getter(stream_source, video_feed_name='video1', manual_video_fps=-1,
                           do_reconnect=False, reconnect_threshold_sec=3, queue_size=3):
     return VideoStream(
@@ -103,25 +113,25 @@ def hex_to_bgr(hex_string):
     return int(b_hex, 16), int(g_hex, 16), int(r_hex, 16)
 
 
-def frame_chooser_on_change(stopped, vid_getter, tracker):
-    if not stopped:
-        vid_getter.start_from(start_msec=get_msec_from_vid_start_time())
-        tracker.delete_all_tracks()
-        time.sleep(0.5)
-
-
-def tracking_on_change(stopped, tracker):
-    clear_cuda_cache()
-    if not stopped:
-        tracker.delete_all_tracks()
-
-
 def cleanup(tfile_path):
     logger.info('Cleaning up...')
     Path(tfile_path).unlink()
 
 
 def main():
+    def frame_chooser_on_change(tracker_deepsort, tracker_bytetrack):
+        if not st.session_state.stopped:
+            st.session_state.vid_getter.start_from(start_msec=get_msec_from_vid_start_time())
+            tracker_deepsort.delete_all_tracks()
+            tracker_bytetrack.delete_all_tracks()
+
+    def tracking_on_change(tracker_deepsort, tracker_bytetrack):
+        clear_cuda_cache()
+        if not st.session_state.stopped:
+            tracker_deepsort.delete_all_tracks()
+            tracker_bytetrack.delete_all_tracks()
+
+
     st.set_page_config(layout='wide')
     st.title('Object detection with ScaledYOLOv4 (Video File)')
 
@@ -135,13 +145,11 @@ def main():
     classes = classes_col.multiselect('Classes to display', COCO_CLASSES, ['person'])
 
     od = initialize_od(model_architecture, input_size)
-    tracker = initialize_deepsort()
-
-    if 'stopped' not in st.session_state:
-        st.session_state.stopped = True
+    tracker_deepsort = initialize_deepsort()
+    tracker_bytetrack = initialize_bytetracker()
 
     tracking_col, color_hex_col, font_size_col = st.columns([2, 2, 6])
-    tracking = tracking_col.checkbox('Tracking with deepsort', on_change=tracking_on_change, args=(st.session_state.stopped, tracker))
+    tracking = tracking_col.radio("Tracking?", ('None', 'DeepSORT', 'ByteTrack'), on_change=tracking_on_change, args=(tracker_deepsort, tracker_bytetrack))
     color_hex = color_hex_col.color_picker('Color for bbox', '#0000ff')
     bbox_color = hex_to_bgr(color_hex)
     font_size = font_size_col.slider('Font size', 0.5, 1.5, 1.0, 0.1)
@@ -182,8 +190,12 @@ def main():
             step=timedelta(seconds=1),
             format='HH:mm:ss',
             key='vid_start_time',
-            on_change=frame_chooser_on_change
+            on_change=frame_chooser_on_change,
+            args=(tracker_deepsort, tracker_bytetrack)
         )
+
+    if 'stopped' not in st.session_state:
+        st.session_state.stopped = True
 
     if st.session_state.inited and start_stop.button('Start / Stop'):
         if st.session_state.stopped:
@@ -204,9 +216,12 @@ def main():
             vid_frame, curr_vid_time_msec = st.session_state.vid_getter.read()
 
             if len(vid_frame):
-                if tracking:
-                    tracks = process_tracks(od, tracker, vid_frame, confidence_threshold, nms_threshold, classes=classes)
+                if tracking == 'DeepSORT':
+                    tracks = process_tracks(od, tracker_deepsort, vid_frame, confidence_threshold, nms_threshold, classes=classes)
                     img = annotate_tracks(vid_frame, tracks, color=bbox_color, font_size=font_size)
+                elif tracking == 'ByteTrack':
+                    tracks = process_byte_tracks(od, tracker_bytetrack, vid_frame, nms_threshold, low_confidence_threshold=0.1, classes=classes)
+                    img = annotate_byte_tracks(vid_frame, tracks, color=bbox_color, font_size=font_size)
                 else:
                     detections = process_image(od, vid_frame, confidence_threshold, nms_threshold, classes=classes)
                     img = annotate_image(vid_frame, detections, color=bbox_color, font_size=font_size)

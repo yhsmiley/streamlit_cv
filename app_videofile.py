@@ -135,24 +135,21 @@ def main():
     st.set_page_config(layout='wide')
     st.title('Object detection with ScaledYOLOv4 (Video File)')
 
-    confidence_threshold_col, _, nms_threshold_col = st.columns([5, 1, 5])
-    confidence_threshold = confidence_threshold_col.slider('Confidence threshold', 0.0, 1.0, 0.5, 0.05)
-    nms_threshold = nms_threshold_col.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
+    confidence_threshold = st.sidebar.slider('Confidence threshold', 0.0, 1.0, 0.5, 0.05)
+    nms_threshold = st.sidebar.slider('NMS threshold', 0.0, 1.0, 0.5, 0.05)
 
-    model_architecture_col, input_size_col, classes_col = st.columns([2, 2, 6])
-    model_architecture = model_architecture_col.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1, on_change=clear_cuda_cache)
-    input_size = input_size_col.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2, on_change=clear_cuda_cache)
-    classes = classes_col.multiselect('Classes to display', COCO_CLASSES, ['person'])
+    model_architecture = st.sidebar.selectbox('Scaled-YOLOv4 model', ('csp', 'p5', 'p6', 'p7'), index=1, on_change=clear_cuda_cache)
+    input_size = st.sidebar.selectbox('Model input size', (512, 640, 896, 1280, 1536), index=2, on_change=clear_cuda_cache)
+    classes = st.sidebar.multiselect('Classes to display', COCO_CLASSES, ['person'])
 
     od = initialize_od(model_architecture, input_size)
     tracker_deepsort = initialize_deepsort()
     tracker_bytetrack = initialize_bytetracker()
 
-    tracking_col, color_hex_col, font_size_col = st.columns([2, 2, 6])
-    tracking = tracking_col.radio("Tracking?", ('None', 'DeepSORT', 'ByteTrack'), on_change=tracking_on_change, args=(tracker_deepsort, tracker_bytetrack))
-    color_hex = color_hex_col.color_picker('Color for bbox', '#0000ff')
+    tracking = st.sidebar.radio("Tracking?", ('None', 'DeepSORT', 'ByteTrack'), on_change=tracking_on_change, args=(tracker_deepsort, tracker_bytetrack))
+    color_hex = st.sidebar.color_picker('Color for bbox', '#0000ff')
     bbox_color = hex_to_bgr(color_hex)
-    font_size = font_size_col.slider('Font size', 0.5, 1.5, 1.0, 0.1)
+    font_size = st.sidebar.slider('Font size', 0.5, 1.5, 1.0, 0.1)
 
     if 'stream_source' not in st.session_state:
         st.session_state.stream_source = None
@@ -171,10 +168,10 @@ def main():
         st.session_state.inited = False
 
     initialize_vid = st.empty()
-    start_stop = st.empty()
     img_placeholder = st.empty()
     frame_time = st.empty()
     frame_chooser = st.empty()
+    start_stop = st.empty()
 
     if 'inited' not in st.session_state:
         st.session_state.inited = False

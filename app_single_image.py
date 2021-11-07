@@ -59,7 +59,7 @@ def main():
 
     color_hex = st.sidebar.color_picker('Color for bbox', '#0000ff')
     bbox_color = hex_to_bgr(color_hex)
-    font_size = st.sidebar.slider('Font size', 0.5, 1.5, 1.0, 0.1)
+    font_size = st.sidebar.slider('Font size', 0.0, 1.5, 1.0, 0.1)
 
     od = initialize_od(model_architecture, input_size)
 

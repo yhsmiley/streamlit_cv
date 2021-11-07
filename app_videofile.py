@@ -149,7 +149,7 @@ def main():
     tracking = st.sidebar.radio("Tracking?", ('None', 'DeepSORT', 'ByteTrack'), on_change=tracking_on_change, args=(tracker_deepsort, tracker_bytetrack))
     color_hex = st.sidebar.color_picker('Color for bbox', '#0000ff')
     bbox_color = hex_to_bgr(color_hex)
-    font_size = st.sidebar.slider('Font size', 0.5, 1.5, 1.0, 0.1)
+    font_size = st.sidebar.slider('Font size', 0.0, 1.5, 1.0, 0.1)
 
     if 'stream_source' not in st.session_state:
         st.session_state.stream_source = None
